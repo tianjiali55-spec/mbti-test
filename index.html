@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>MBTI 人格测试</title>
+<style>
+/* ===== Reset & Base ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;font-family:"SF Pro Display","SF Pro Text","PingFang SC","Helvetica Neue",sans-serif;background:#06060b;color:#e8e8f0;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+
+/* ===== Canvas Particle Background ===== */
+#particle-canvas{position:fixed;inset:0;z-index:0;pointer-events:none}
+
+/* ===== Main Container ===== */
+#app{position:fixed;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;overflow:hidden}
+
+/* ===== Screen System ===== */
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 32px;opacity:0;pointer-events:none;transition:opacity 0.6s cubic-bezier(0.23,1,0.32,1),transform 0.6s cubic-bezier(0.23,1,0.32,1);transform:translateY(20px)}
+.screen.active{opacity:1;pointer-events:auto;transform:translateY(0)}
+.screen.exit-up{opacity:0;transform:translateY(-60px)}
+.screen.exit-down{opacity:0;transform:translateY(60px)}
+
+/* ===== Intro Screen ===== */
+#intro-screen{z-index:10}
+.intro-logo{width:90px;height:90px;border-radius:28px;background:linear-gradient(135deg,#6366f1,#a855f7,#ec4899);display:flex;align-items:center;justify-content:center;font-size:42px;margin-bottom:32px;box-shadow:0 20px 60px rgba(99,102,241,0.35);animation:logoFloat 3s ease-in-out infinite}
+@keyframes logoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.intro-title{font-size:38px;font-weight:700;letter-spacing:-0.5px;text-align:center;line-height:1.2;margin-bottom:8px;background:linear-gradient(135deg,#e8e8f0,#a5a5c0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.intro-subtitle{font-size:16px;color:#7878a0;text-align:center;margin-bottom:48px;line-height:1.5}
+.intro-btn{width:220px;height:56px;border-radius:28px;border:none;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:18px;font-weight:600;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 8px 32px rgba(99,102,241,0.3)}
+.intro-btn:active{transform:scale(0.96);box-shadow:0 4px 16px rgba(99,102,241,0.4)}
+.camera-preview-mini{width:120px;height:120px;border-radius:50%;overflow:hidden;border:3px solid rgba(255,255,255,0.15);margin-top:36px;opacity:0.6;transition:opacity 0.8s}
+.camera-preview-mini.visible{opacity:1}
+.camera-preview-mini video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+
+/* ===== Question Screen ===== */
+#question-screen{z-index:9}
+.progress-ring{position:relative;width:140px;height:140px;margin-bottom:40px}
+.progress-ring svg{transform:rotate(-90deg);width:100%;height:100%}
+.progress-ring .bg{fill:none;stroke:rgba(255,255,255,0.06);stroke-width:4}
+.progress-ring .fg{fill:none;stroke:url(#progressGrad);stroke-width:4;stroke-linecap:round;transition:stroke-dashoffset 0.5s cubic-bezier(0.23,1,0.32,1)}
+.progress-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#e8e8f0}
+.q-card{width:100%;max-width:480px;background:rgba(255,255,255,0.04);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-radius:24px;border:1px solid rgba(255,255,255,0.08);padding:36px 28px;position:relative;overflow:hidden}
+.q-card::before{content:'';position:absolute;inset:0;border-radius:24px;background:radial-gradient(ellipse at 50% 0%,rgba(99,102,241,0.08),transparent 70%);pointer-events:none}
+.q-dimension{font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#8b8ba8;margin-bottom:16px}
+.q-text{font-size:22px;font-weight:600;line-height:1.4;color:#e8e8f0;margin-bottom:8px}
+.q-hint{font-size:13px;color:#6a6a8a;margin-bottom:32px}
+.q-options{display:flex;flex-direction:column;gap:10px}
+.q-option{width:100%;padding:16px 20px;border-radius:16px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#c8c8e0;font-size:15px;text-align:left;cursor:pointer;transition:all 0.25s cubic-bezier(0.23,1,0.32,1);position:relative;overflow:hidden}
+.q-option:active{transform:scale(0.97)}
+.q-option.selected{border-color:#6366f1;background:rgba(99,102,241,0.12);color:#fff;box-shadow:0 0 30px rgba(99,102,241,0.15)}
+.q-option.selected::after{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:#6366f1;border-radius:0 3px 3px 0}
+.swipe-hint{display:flex;align-items:center;gap:12px;margin-top:32px;color:#5a5a7a;font-size:13px;animation:swipeHintPulse 2s ease-in-out infinite}
+@keyframes swipeHintPulse{0%,100%{opacity:0.4}50%{opacity:1}}
+.swipe-arrow{font-size:20px}
+
+/* ===== Camera Screen ===== */
+#camera-screen{z-index:8}
+.camera-container{width:100%;max-width:480px;aspect-ratio:3/4;border-radius:24px;overflow:hidden;position:relative;border:1px solid rgba(255,255,255,0.1);background:#000}
+.camera-container video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.camera-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.camera-frame{border:2px solid rgba(255,255,255,0.3);border-radius:50%;width:200px;height:200px;animation:cameraFramePulse 2s ease-in-out infinite}
+@keyframes cameraFramePulse{0%,100%{border-color:rgba(255,255,255,0.3);box-shadow:0 0 0 0 rgba(255,255,255,0.1)}50%{border-color:rgba(255,255,255,0.6);box-shadow:0 0 40px 10px rgba(99,102,241,0.1)}}
+.camera-capture-btn{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,0.2);cursor:pointer;position:absolute;bottom:32px;left:50%;transform:translateX(-50%);transition:transform 0.15s,background 0.15s;z-index:2}
+.camera-capture-btn:active{transform:translateX(-50%) scale(0.85);background:rgba(255,255,255,0.4)}
+.camera-label{position:absolute;top:24px;left:50%;transform:translateX(-50%);color:#fff;font-size:15px;font-weight:600;z-index:2;text-shadow:0 2px 8px rgba(0,0,0,0.5)}
+.camera-skip{position:absolute;top:24px;right:24px;color:rgba(255,255,255,0.7);font-size:14px;cursor:pointer;z-index:2;padding:8px 16px;background:rgba(0,0,0,0.4);border-radius:20px;border:none}
+.camera-filters{position:absolute;bottom:120px;left:0;right:0;display:flex;justify-content:center;gap:12px;z-index:2}
+.camera-filter{width:40px;height:40px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);cursor:pointer;transition:border-color 0.2s,transform 0.2s;overflow:hidden}
+.camera-filter.active{border-color:#fff;transform:scale(1.15)}
+.camera-filter:nth-child(1){background:transparent}
+.camera-filter:nth-child(2){background:linear-gradient(135deg,rgba(99,102,241,0.4),rgba(168,85,247,0.3))}
+.camera-filter:nth-child(3){filter:grayscale(1);background:rgba(128,128,128,0.3)}
+.camera-filter:nth-child(4){background:linear-gradient(135deg,rgba(236,72,153,0.3),rgba(244,114,182,0.2))}
+
+/* ===== Result Screen ===== */
+#result-screen{z-index:7}
+.result-badge{font-size:72px;font-weight:800;letter-spacing:-2px;margin-bottom:8px;animation:resultReveal 0.8s cubic-bezier(0.23,1,0.32,1);background:linear-gradient(135deg,#6366f1,#a855f7,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+@keyframes resultReveal{0%{transform:scale(0.3);opacity:0;filter:blur(20px)}60%{transform:scale(1.05);opacity:1;filter:blur(0)}100%{transform:scale(1);opacity:1;filter:blur(0)}}
+.result-type-name{font-size:20px;font-weight:600;color:#a0a0c0;margin-bottom:32px}
+.result-card{width:100%;max-width:480px;background:rgba(255,255,255,0.04);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-radius:24px;border:1px solid rgba(255,255,255,0.08);padding:28px;margin-bottom:20px}
+.result-card h3{font-size:14px;font-weight:600;letter-spacing:1px;color:#7878a0;margin-bottom:12px;text-transform:uppercase}
+.result-card p{font-size:15px;line-height:1.6;color:#b8b8d0}
+.result-bars{display:flex;flex-direction:column;gap:14px;margin-bottom:28px;width:100%;max-width:480px}
+.result-bar-row{display:flex;align-items:center;gap:12px}
+.result-bar-label{font-size:13px;font-weight:600;color:#8b8ba8;width:36px;text-align:center}
+.result-bar-track{flex:1;height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;position:relative}
+.result-bar-fill{height:100%;border-radius:4px;transition:width 1s cubic-bezier(0.23,1,0.32,1)}
+.result-bar-fill.ei{background:linear-gradient(90deg,#f59e0b,#6366f1)}
+.result-bar-fill.sn{background:linear-gradient(90deg,#10b981,#a855f7)}
+.result-bar-fill.tf{background:linear-gradient(90deg,#3b82f6,#ec4899)}
+.result-bar-fill.jp{background:linear-gradient(90deg,#f59e0b,#14b8a6)}
+.result-photo{width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,0.15);margin-bottom:20px}
+.result-actions{display:flex;gap:12px}
+.result-btn{flex:1;height:48px;border-radius:24px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#c8c8e0;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s}
+.result-btn:active{background:rgba(255,255,255,0.1);transform:scale(0.97)}
+.result-btn.primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;color:#fff}
+
+/* ===== Toast ===== */
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(30,30,50,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);color:#e8e8f0;padding:12px 24px;border-radius:24px;font-size:14px;z-index:100;opacity:0;transition:opacity 0.3s;pointer-events:none;border:1px solid rgba(255,255,255,0.1)}
+.toast.show{opacity:1}
+
+/* ===== Responsive (iPad) ===== */
+@media(min-width:768px){
+  .intro-title{font-size:48px}
+  .q-text{font-size:26px}
+  .q-card{padding:44px 36px}
+  .result-badge{font-size:96px}
+  .camera-container{max-width:420px}
+}
+@media(min-width:1024px){
+  .intro-title{font-size:56px}
+}
+</style>
+</head>
+<body>
+
+<canvas id="particle-canvas"></canvas>
+
+<div id="app">
+  <!-- Intro Screen -->
+  <div class="screen active" id="intro-screen">
+    <div class="intro-logo">🧠</div>
+    <h1 class="intro-title">发现你的<br>人格密码</h1>
+    <p class="intro-subtitle">20 道精心设计的问题<br>结合摄像头互动，解锁你的 MBTI 类型</p>
+    <button class="intro-btn" id="btn-start">开始探�?/button>
+    <div class="camera-preview-mini" id="mini-camera">
+      <video id="mini-video" autoplay playsinline muted></video>
+    </div>
+  </div>
+
+  <!-- Question Screen -->
+  <div class="screen" id="question-screen">
+    <div class="progress-ring">
+      <svg viewBox="0 0 140 140">
+        <defs><linearGradient id="progressGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs>
+        <circle class="bg" cx="70" cy="70" r="62"/>
+        <circle class="fg" id="progress-fg" cx="70" cy="70" r="62" stroke-dasharray="389.56" stroke-dashoffset="389.56"/>
+      </svg>
+      <div class="progress-text" id="progress-text">1/20</div>
+    </div>
+    <div class="q-card" id="q-card">
+      <div class="q-dimension" id="q-dim"></div>
+      <div class="q-text" id="q-text"></div>
+      <div class="q-hint" id="q-hint"></div>
+      <div class="q-options" id="q-options"></div>
+    </div>
+    <div class="swipe-hint" id="swipe-hint">
+      <span class="swipe-arrow">👆</span>
+      <span>点击选项即可作答</span>
+    </div>
+  </div>
+
+  <!-- Camera Screen -->
+  <div class="screen" id="camera-screen">
+    <div class="camera-container" id="camera-container">
+      <video id="camera-video" autoplay playsinline muted></video>
+      <canvas id="camera-canvas" style="display:none"></canvas>
+      <div class="camera-overlay">
+        <div class="camera-frame"></div>
+      </div>
+      <div class="camera-label">拍一张你�?MBTI 肖像</div>
+      <button class="camera-skip" id="btn-skip-camera">跳过</button>
+      <div class="camera-filters">
+        <button class="camera-filter active" data-filter="none"></button>
+        <button class="camera-filter" data-filter="vivid"></button>
+        <button class="camera-filter" data-filter="mono"></button>
+        <button class="camera-filter" data-filter="warm"></button>
+      </div>
+      <button class="camera-capture-btn" id="btn-capture"></button>
+    </div>
+  </div>
+
+  <!-- Result Screen -->
+  <div class="screen" id="result-screen">
+    <img class="result-photo" id="result-photo" alt="" style="display:none">
+    <div class="result-badge" id="result-badge"></div>
+    <div class="result-type-name" id="result-type-name"></div>
+    <div class="result-bars" id="result-bars"></div>
+    <div class="result-card">
+      <h3>人格解读</h3>
+      <p id="result-desc"></p>
+    </div>
+    <div class="result-actions">
+      <button class="result-btn" id="btn-retake">重新测试</button>
+      <button class="result-btn primary" id="btn-share">分享结果</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== MBTI Question Bank =====
+const questions = [
+  // E/I (5 questions)
+  {id:1, dim:'EI', dimLabel:'外向 E · 内向 I', text:'度过漫长的一周后，你更倾向于如何充电？', hint:'选择最贴近你自然倾向的选项', options:[
+    {text:'和朋友聚会、社交活�?, score:'E'},
+    {text:'独自在家安静休息', score:'I'}
+  ]},
+  {id:2, dim:'EI', dimLabel:'外向 E · 内向 I', text:'在聚会或社交场合中，你通常会？', hint:'', options:[
+    {text:'穿梭于不同人群，认识新朋�?, score:'E'},
+    {text:'和一两个熟人深入交谈', score:'I'}
+  ]},
+  {id:3, dim:'EI', dimLabel:'外向 E · 内向 I', text:'思考问题时，你更倾向于？', hint:'', options:[
+    {text:'边说出来边整理思路', score:'E'},
+    {text:'在内心反复推敲后再表�?, score:'I'}
+  ]},
+  {id:4, dim:'EI', dimLabel:'外向 E · 内向 I', text:'认识新朋友对你来说通常是？', hint:'', options:[
+    {text:'令人兴奋和充满能�?, score:'E'},
+    {text:'需要耗费精力去应�?, score:'I'}
+  ]},
+  {id:5, dim:'EI', dimLabel:'外向 E · 内向 I', text:'你更享受哪种工作环境�?, hint:'', options:[
+    {text:'开放热闹的协作空间', score:'E'},
+    {text:'安静独立的专注角�?, score:'I'}
+  ]},
+  // S/N (5 questions)
+  {id:6, dim:'SN', dimLabel:'感觉 S · 直觉 N', text:'在处理信息时，你更关注？', hint:'', options:[
+    {text:'具体的事实和细节', score:'S'},
+    {text:'整体的模式和可能�?, score:'N'}
+  ]},
+  {id:7, dim:'SN', dimLabel:'感觉 S · 直觉 N', text:'解决问题时，你更依赖�?, hint:'', options:[
+    {text:'过去的经验和已验证的方法', score:'S'},
+    {text:'直觉和灵光一现的想法', score:'N'}
+  ]},
+  {id:8, dim:'SN', dimLabel:'感觉 S · 直觉 N', text:'你更喜欢什么样的指导？', hint:'', options:[
+    {text:'清晰、逐步的详细指�?, score:'S'},
+    {text:'灵活的框架，自由发挥空间', score:'N'}
+  ]},
+  {id:9, dim:'SN', dimLabel:'感觉 S · 直觉 N', text:'你对什么更感兴趣？', hint:'', options:[
+    {text:'当下实际可行的方�?, score:'S'},
+    {text:'未来的可能性和创新想法', score:'N'}
+  ]},
+  {id:10, dim:'SN', dimLabel:'感觉 S · 直觉 N', text:'做判断时你更倾向于相信？', hint:'', options:[
+    {text:'数据、事实和客观证据', score:'S'},
+    {text:'内心的感觉和预兆', score:'N'}
+  ]},
+  // T/F (5 questions)
+  {id:11, dim:'TF', dimLabel:'思�?T · 情感 F', text:'做重要决定时，你优先考虑�?, hint:'', options:[
+    {text:'逻辑一致性和客观原则', score:'T'},
+    {text:'对相关人员的影响和感�?, score:'F'}
+  ]},
+  {id:12, dim:'TF', dimLabel:'思�?T · 情感 F', text:'面对冲突时，你更关注�?, hint:'', options:[
+    {text:'找到正确的答案和真相', score:'T'},
+    {text:'维护关系的和谐与感受', score:'F'}
+  ]},
+  {id:13, dim:'TF', dimLabel:'思�?T · 情感 F', text:'哪种论证更能说服你？', hint:'', options:[
+    {text:'数据充分、逻辑严密的理性论�?, score:'T'},
+    {text:'触动人心的故事和情感诉求', score:'F'}
+  ]},
+  {id:14, dim:'TF', dimLabel:'思�?T · 情感 F', text:'你认为好的反馈应该是�?, hint:'', options:[
+    {text:'直接坦诚，直指问题核�?, score:'T'},
+    {text:'温和鼓励，顾及对方感�?, score:'F'}
+  ]},
+  {id:15, dim:'TF', dimLabel:'思�?T · 情感 F', text:'你更看重�?, hint:'', options:[
+    {text:'公平优先于共�?, score:'T'},
+    {text:'共情优先于公�?, score:'F'}
+  ]},
+  // J/P (5 questions)
+  {id:16, dim:'JP', dimLabel:'判断 J · 感知 P', text:'在日常生活中，你更倾向于？', hint:'', options:[
+    {text:'有计划、有结构地安排事�?, score:'J'},
+    {text:'保持弹性，随时调整', score:'P'}
+  ]},
+  {id:17, dim:'JP', dimLabel:'判断 J · 感知 P', text:'截止日期对你来说�?, hint:'', options:[
+    {text:'有助于高效推进工�?, score:'J'},
+    {text:'让人感到束缚和压�?, score:'P'}
+  ]},
+  {id:18, dim:'JP', dimLabel:'判断 J · 感知 P', text:'你的工作空间通常是？', hint:'', options:[
+    {text:'整洁有序、井井有�?, score:'J'},
+    {text:'灵活随意、富有创�?, score:'P'}
+  ]},
+  {id:19, dim:'JP', dimLabel:'判断 J · 感知 P', text:'旅行时你更倾向于？', hint:'', options:[
+    {text:'提前规划好行程路�?, score:'J'},
+    {text:'随心所欲，走到哪算�?, score:'P'}
+  ]},
+  {id:20, dim:'JP', dimLabel:'判断 J · 感知 P', text:'你更舒服的状态是�?, hint:'', options:[
+    {text:'事情已有明确的决定和安排', score:'J'},
+    {text:'选项保持开放，留有变化余地', score:'P'}
+  ]},
+];
+
+// ===== MBTI Type Descriptions =====
+const typeDescriptions = {
+  'INTJ':{name:'建筑�?,desc:'你是一位战略型思考者，拥有强大的内在世界。你善于制定长远计划，将复杂的想法转化为清晰的行动路径。独立、坚定、富有远见——你天生就是系统的构建者和优化者。你对知识和能力有着永不满足的渴望�?},
+  'INTP':{name:'逻辑学家',desc:'你拥有永不满足的好奇心和对真理的执着。你的思维世界广阔而精密，总是在追寻事物背后的原理和模式。创新、客观、深刻——你享受拆解复杂问题，并在思想的自由探索中找到真正的乐趣�?},
+  'ENTJ':{name:'指挥�?,desc:'你天生就是领导者——果断、富有魅力且目标明确。你善于看到全局并将资源和人组织起来实现雄心勃勃的目标。自信、战略、高效，你不畏挑战，总是在推动自己和他人走向卓越�?},
+  'ENTP':{name:'辩论�?,desc:'你是一个充满活力的思想探索者，迷恋于智力挑战和可能性。机智、敏捷、富有创造力，你乐于质疑常规，在激烈的思想交锋中找到灵感。你总是能看到事物的另一面，并以此为乐�?},
+  'INFJ':{name:'提倡�?,desc:'你拥有深邃的洞察力和坚定的理想主义。你不仅能看到世界的现状，更能看到它可能成为的样子。同理心、创造力与决心的结合让你成为温和而有力的变革推动者，默默地照亮他人的道路�?},
+  'INFP':{name:'调停�?,desc:'你的内心世界丰富而充满诗意，驱动你的是深刻的价值观和对真实的渴望。你拥有罕见的共情能力和创造力，总是在寻找事物背后的意义。温和但不软弱，你以安静的方式守护着自己的信念�?},
+  'ENFJ':{name:'主人�?,desc:'你天生就是激励者——充满魅力、热情且真正关心他人。你善于洞察他人的潜力并帮助他们成长。你拥有罕见的将愿景与行动结合的能力，能在鼓舞人心的同时带领大家实现共同目标�?},
+  'ENFP':{name:'竞选�?,desc:'你拥有感染力的热情和对生活的无限好奇。自由、创意、善于连接——你总能发现人和事物之间的奇妙联系。你的热情和想象力让周围的世界变得更加精彩，而你对可能性的信仰激励着每个人�?},
+  'ISTJ':{name:'物流�?,desc:'你是可靠和精确的化身。你以事实为依据，以经验为指南，善于创建和维护秩序。务实、负责、坚守承诺——你是所有人都可以依靠的坚实后盾，你的诚信和勤奋不言自明�?},
+  'ISFJ':{name:'守卫�?,desc:'你温暖而坚定，是默默守护他人的力量。你注重细节，关心具体的人，用实际的行动表达关爱。谦逊、专注、有耐心——你在日常的守护中找到意义，让身边的人感受到安全和被珍视�?},
+  'ESTJ':{name:'总经�?,desc:'你是卓越的组织者和执行者。你坚信规则和秩序的力量，善于将混乱变为高效的系统。果断、务实、值得信赖——你带领团队完成任务，用清晰的行动和坚定的标准推动世界运转�?},
+  'ESFJ':{name:'执政�?,desc:'你温暖、慷慨，是社群的天然守护者。你在乎周围的人，善于创造和谐的环境。细心、尽责、富有同理心——你以实际行动关怀他人，在服务中找到了最深层的满足和意义�?},
+  'ISTP':{name:'鉴赏�?,desc:'你冷静而务实，是动手解决问题的专家。你善于分析实际情况并找到最简洁有效的方案。灵活、理性、喜欢探索——你享受理解事物运作原理的过程，并在实践中磨练技艺�?},
+  'ISFP':{name:'探险�?,desc:'你拥有敏锐的审美和温柔的内心。你活在当下，用感官体验世界，善于发现平凡中的美。真诚、灵活、富有艺术感——你以自己的步调探索世界，用独特的视角创造属于自己的风景�?},
+  'ESTP':{name:'企业�?,desc:'你充满活力，善于在瞬息万变的环境中抓住机会。务实、直接、行动力强——你享受活在当下的刺激，用敏锐的观察力和快速的应变能力影响周围。你不怕冒险，因为行动本身就是答案�?},
+  'ESFP':{name:'表演�?,desc:'你是天生的快乐传播者。你热爱舞台，享受与人互动，总能在日常中发现乐趣和惊喜。热情、自发、富有感染力——你用真诚的笑容和活力点亮每个空间，让生活本身成为一场精彩的演出�?},
+};
+
+// ===== State =====
+let state = {
+  currentQ: 0,
+  scores: {E:0,I:0,S:0,N:0,T:0,F:0,J:0,P:0},
+  photoData: null,
+  cameraStream: null,
+  activeFilter: 'none',
+};
+
+// ===== DOM Refs =====
+const $ = id => document.getElementById(id);
+const introScreen = $('intro-screen');
+const questionScreen = $('question-screen');
+const cameraScreen = $('camera-screen');
+const resultScreen = $('result-screen');
+const toast = $('toast');
+
+// ===== Particle Background =====
+const canvas = $('particle-canvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+let mouseX = -100, mouseY = -100;
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+class Particle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = Math.random() * canvas.width;
+    this.y = Math.random() * canvas.height;
+    this.size = Math.random() * 2 + 0.5;
+    this.speedX = (Math.random() - 0.5) * 0.3;
+    this.speedY = (Math.random() - 0.5) * 0.3;
+    this.opacity = Math.random() * 0.5 + 0.1;
+    this.pulseSpeed = Math.random() * 0.02 + 0.01;
+    this.pulseOffset = Math.random() * Math.PI * 2;
+  }
+  update(time) {
+    // Float toward mouse slightly
+    const dx = mouseX - this.x;
+    const dy = mouseY - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < 200) {
+      this.x -= dx * 0.002;
+      this.y -= dy * 0.002;
+    }
+    this.x += this.speedX;
+    this.y += this.speedY;
+    if (this.x < -20) this.x = canvas.width + 20;
+    if (this.x > canvas.width + 20) this.x = -20;
+    if (this.y < -20) this.y = canvas.height + 20;
+    if (this.y > canvas.height + 20) this.y = -20;
+    this.currentOpacity = this.opacity + Math.sin(time * this.pulseSpeed + this.pulseOffset) * 0.15;
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(160,160,220,${Math.max(0,this.currentOpacity)})`;
+    ctx.fill();
+  }
+}
+
+for (let i = 0; i < 80; i++) particles.push(new Particle());
+
+function animateParticles(time) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Draw connections
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i+1; j < particles.length; j++) {
+      const dx = particles[i].x - particles[j].x;
+      const dy = particles[i].y - particles[j].y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 100) {
+        ctx.beginPath();
+        ctx.moveTo(particles[i].x, particles[i].y);
+        ctx.lineTo(particles[j].x, particles[j].y);
+        ctx.strokeStyle = `rgba(120,120,200,${0.06 * (1 - dist/100)})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+  particles.forEach(p => { p.update(time); p.draw(); });
+  requestAnimationFrame(animateParticles);
+}
+requestAnimationFrame(animateParticles);
+
+document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+document.addEventListener('touchmove', e => {
+  if (e.touches.length > 0) { mouseX = e.touches[0].clientX; mouseY = e.touches[0].clientY; }
+}, {passive: true});
+
+// ===== Screen Transitions =====
+function switchScreen(from, to, direction) {
+  const cls = direction === 'up' ? 'exit-up' : 'exit-down';
+  from.classList.add(cls);
+  from.classList.remove('active');
+  to.classList.remove('exit-up', 'exit-down');
+  to.style.transform = direction === 'up' ? 'translateY(60px)' : 'translateY(-60px)';
+  to.classList.add('active');
+  requestAnimationFrame(() => {
+    to.style.transform = 'translateY(0)';
+  });
+  setTimeout(() => {
+    from.classList.remove(cls);
+  }, 600);
+}
+
+// ===== Toast =====
+let toastTimer;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+// ===== Question Rendering =====
+function renderQuestion() {
+  const q = questions[state.currentQ];
+  $('q-dim').textContent = q.dimLabel;
+  $('q-text').textContent = q.text;
+  $('q-hint').textContent = q.hint;
+  $('progress-text').textContent = `${state.currentQ + 1}/20`;
+
+  // Update progress ring
+  const total = 389.56;
+  const offset = total - (total * ((state.currentQ) / 20));
+  $('progress-fg').style.strokeDashoffset = offset;
+
+  // Render options
+  const optsContainer = $('q-options');
+  optsContainer.innerHTML = '';
+  q.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'q-option';
+    btn.textContent = opt.text;
+    btn.addEventListener('click', () => selectOption(i));
+    optsContainer.appendChild(btn);
+  });
+
+  // Card entrance animation
+  const card = $('q-card');
+  card.style.transform = 'translateY(20px)';
+  card.style.opacity = '0';
+  requestAnimationFrame(() => {
+    card.style.transition = 'transform 0.5s cubic-bezier(0.23,1,0.32,1), opacity 0.4s ease';
+    card.style.transform = 'translateY(0)';
+    card.style.opacity = '1';
+  });
+}
+
+function selectOption(index) {
+  const q = questions[state.currentQ];
+  const score = q.options[index].score;
+  state.scores[score]++;
+
+  // Visual feedback
+  const opts = $('q-options').children;
+  for (let i = 0; i < opts.length; i++) {
+    opts[i].classList.remove('selected');
+    opts[i].style.pointerEvents = 'none';
+  }
+  opts[index].classList.add('selected');
+
+  // Auto advance
+  setTimeout(() => {
+    if (state.currentQ < questions.length - 1) {
+      state.currentQ++;
+      renderQuestion();
+    } else {
+      // All questions answered, go to camera
+      switchScreen(questionScreen, cameraScreen, 'up');
+      startCamera();
+    }
+  }, 400);
+}
+
+// ===== Camera =====
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {facingMode:'user', width:{ideal:720}, height:{ideal:960}},
+      audio: false
+    });
+    state.cameraStream = stream;
+    $('camera-video').srcObject = stream;
+    applyFilter(state.activeFilter);
+  } catch(e) {
+    console.log('Camera unavailable:', e);
+    $('camera-label').textContent = '摄像头不可用';
+  }
+}
+
+function stopCamera() {
+  if (state.cameraStream) {
+    state.cameraStream.getTracks().forEach(t => t.stop());
+    state.cameraStream = null;
+  }
+}
+
+function applyFilter(filter) {
+  state.activeFilter = filter;
+  const video = $('camera-video');
+  switch(filter) {
+    case 'none': video.style.filter = 'none'; break;
+    case 'vivid': video.style.filter = 'saturate(1.5) contrast(1.1)'; break;
+    case 'mono': video.style.filter = 'grayscale(1) contrast(1.1)'; break;
+    case 'warm': video.style.filter = 'sepia(0.4) saturate(1.3)'; break;
+    default: video.style.filter = 'none';
+  }
+  document.querySelectorAll('.camera-filter').forEach(el => {
+    el.classList.toggle('active', el.dataset.filter === filter);
+  });
+}
+
+document.querySelectorAll('.camera-filter').forEach(btn => {
+  btn.addEventListener('click', () => applyFilter(btn.dataset.filter));
+});
+
+$('btn-capture').addEventListener('click', () => {
+  const video = $('camera-video');
+  const canvasEl = $('camera-canvas');
+  canvasEl.width = video.videoWidth || 720;
+  canvasEl.height = video.videoHeight || 960;
+  const ctx2 = canvasEl.getContext('2d');
+  ctx2.save();
+  ctx2.scale(-1, 1);
+  ctx2.drawImage(video, -canvasEl.width, 0, canvasEl.width, canvasEl.height);
+  ctx2.restore();
+  // Apply filter to captured image
+  switch(state.activeFilter) {
+    case 'vivid':
+      ctx2.fillStyle = 'rgba(99,102,241,0.1)';
+      ctx2.fillRect(0, 0, canvasEl.width, canvasEl.height);
+      break;
+    case 'mono':
+      const imgData = ctx2.getImageData(0, 0, canvasEl.width, canvasEl.height);
+      for (let i = 0; i < imgData.data.length; i += 4) {
+        const avg = (imgData.data[i] + imgData.data[i+1] + imgData.data[i+2]) / 3;
+        imgData.data[i] = avg;
+        imgData.data[i+1] = avg;
+        imgData.data[i+2] = avg;
+      }
+      ctx2.putImageData(imgData, 0, 0);
+      break;
+    case 'warm':
+      ctx2.fillStyle = 'rgba(255,180,120,0.15)';
+      ctx2.fillRect(0, 0, canvasEl.width, canvasEl.height);
+      break;
+  }
+  state.photoData = canvasEl.toDataURL('image/jpeg', 0.9);
+  showToast('照片已保存！');
+  stopCamera();
+  setTimeout(() => showResults(), 600);
+});
+
+$('btn-skip-camera').addEventListener('click', () => {
+  stopCamera();
+  showResults();
+});
+
+// ===== Results =====
+function showResults() {
+  const type = calculateType();
+  const desc = typeDescriptions[type] || {name:'探索�?,desc:'你拥有独特的个性组合，是你自己最精彩的版本�?};
+
+  $('result-badge').textContent = type;
+  $('result-type-name').textContent = desc.name;
+  $('result-desc').textContent = desc.desc;
+
+  // Photo
+  const photoImg = $('result-photo');
+  if (state.photoData) {
+    photoImg.src = state.photoData;
+    photoImg.style.display = 'block';
+  } else {
+    photoImg.style.display = 'none';
+  }
+
+  // Dimension bars
+  renderDimensionBars();
+
+  // Switch screen with staggered animation
+  switchScreen(cameraScreen, resultScreen, 'up');
+
+  // Animate bars after screen transition
+  setTimeout(() => {
+    animateBars();
+  }, 700);
+}
+
+function calculateType() {
+  const e = state.scores.E, i = state.scores.I;
+  const s = state.scores.S, n = state.scores.N;
+  const t = state.scores.T, f = state.scores.F;
+  const j = state.scores.J, p = state.scores.P;
+
+  let type = '';
+  type += e >= i ? 'E' : 'I';
+  type += s >= n ? 'S' : 'N';
+  type += t >= f ? 'T' : 'F';
+  type += j >= p ? 'J' : 'P';
+  return type;
+}
+
+function renderDimensionBars() {
+  const e = state.scores.E, i = state.scores.I;
+  const s = state.scores.S, n = state.scores.N;
+  const t = state.scores.T, f = state.scores.F;
+  const j = state.scores.J, p = state.scores.P;
+
+  const dims = [
+    {label:'E',labelR:'I',val:e,total:e+i,cls:'ei',left:'E 外向',right:'I 内向'},
+    {label:'S',labelR:'N',val:s,total:s+n,cls:'sn',left:'S 感觉',right:'N 直觉'},
+    {label:'T',labelR:'F',val:t,total:t+f,cls:'tf',left:'T 思�?,right:'F 情感'},
+    {label:'J',labelR:'P',val:j,total:j+p,cls:'jp',left:'J 判断',right:'P 感知'},
+  ];
+
+  const container = $('result-bars');
+  container.innerHTML = '';
+  dims.forEach(d => {
+    const pct = Math.round((d.val / d.total) * 100);
+    const row = document.createElement('div');
+    row.className = 'result-bar-row';
+    row.innerHTML = `
+      <span class="result-bar-label" style="color:${pct>=50?'#e8e8f0':'#7878a0'}">${d.left.split(' ')[0]}</span>
+      <div class="result-bar-track">
+        <div class="result-bar-fill ${d.cls}" data-width="${pct}%" style="width:0%"></div>
+      </div>
+      <span class="result-bar-label" style="color:${pct<50?'#e8e8f0':'#7878a0'}">${d.right.split(' ')[0]}</span>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function animateBars() {
+  document.querySelectorAll('.result-bar-fill').forEach(bar => {
+    bar.style.width = bar.dataset.width;
+  });
+}
+
+// ===== Buttons =====
+$('btn-start').addEventListener('click', () => {
+  switchScreen(introScreen, questionScreen, 'up');
+  renderQuestion();
+  // Try mini camera preview
+  tryStartMiniCamera();
+});
+
+$('btn-retake').addEventListener('click', () => {
+  state = {
+    currentQ: 0,
+    scores: {E:0,I:0,S:0,N:0,T:0,F:0,J:0,P:0},
+    photoData: null,
+    cameraStream: null,
+    activeFilter: 'none',
+  };
+  $('result-photo').style.display = 'none';
+  switchScreen(resultScreen, questionScreen, 'down');
+  setTimeout(() => renderQuestion(), 300);
+});
+
+$('btn-share').addEventListener('click', () => {
+  const type = calculateType();
+  const desc = typeDescriptions[type];
+  const text = `🧠 我的 MBTI 人格类型�?${type}�?{desc.name}」！快来测测你的人格密码 →`;
+  if (navigator.share) {
+    navigator.share({title:'MBTI 人格测试',text}).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(text).then(() => showToast('已复制分享文�?))
+      .catch(() => showToast('分享失败，请截图保存'));
+  }
+});
+
+// ===== Mini Camera Preview =====
+async function tryStartMiniCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {facingMode:'user', width:{ideal:120}, height:{ideal:120}},
+      audio: false
+    });
+    const miniVideo = $('mini-video');
+    miniVideo.srcObject = stream;
+    $('mini-camera').classList.add('visible');
+  } catch(e) {
+    // Silent fail for mini camera
+  }
+}
+
+// ===== Gesture Support (Swipe on question card) =====
+let touchStartX = 0, touchStartY = 0;
+$('q-card').addEventListener('touchstart', e => {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, {passive: true});
+
+$('q-card').addEventListener('touchend', e => {
+  const dx = (e.changedTouches[0]?.clientX || touchStartX) - touchStartX;
+  const dy = (e.changedTouches[0]?.clientY || touchStartY) - touchStartY;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+    if (dx < 0 && state.currentQ < questions.length - 1) {
+      // Swipe left = next question (same as answering in flow)
+    }
+  }
+});
+
+// ===== Keyboard navigation for dev =====
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' && questionScreen.classList.contains('active')) {
+    if (state.currentQ < questions.length - 1) {
+      state.currentQ++;
+      renderQuestion();
+    }
+  }
+  if (e.key === 'ArrowLeft' && questionScreen.classList.contains('active')) {
+    if (state.currentQ > 0) {
+      state.currentQ--;
+      renderQuestion();
+    }
+  }
+});
+
+// ===== Initial =====
+console.log('🧠 MBTI Personality Test Ready');
+console.log('Design inspirations: Stripe, Apple, Linear, Vercel, Figma, Notion, Arc, Raycast, Loom, GitHub');
+</script>
+</body>
+</html>
